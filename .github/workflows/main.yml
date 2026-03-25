@@ -7,13 +7,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unzip and Organize Files # فك الضغط وتنظيم الملفات
+      - name: Unzip and Rescue Files # فك الضغط والبحث عن الملفات
         run: |
-          unzip "كل الملفات.zip" -d temp_extract
-          # نقل الملفات من المجلد الفرعي للمجلد الرئيسي إذا وجدت
-          find temp_extract -maxdepth 2 -name "gradlew" -execdir mv ./* ../../ \; || true
-          # إعطاء صلاحيات التشغيل
-          chmod +x gradlew || echo "Warning: gradlew not found yet"
+          # نستخدم *.zip للتعامل مع أي ملف مضغوط بغض النظر عن اسمه العربي
+          unzip -o "*.zip" -d extracted_files
+          
+          # البحث عن المجلد الذي يحتوي على ملف gradlew ونقل محتوياته للمجلد الرئيسي
+          PROJECT_ROOT=$(find extracted_files -name "gradlew" -exec dirname {} \;)
+          if [ -n "$PROJECT_ROOT" ]; then
+            echo "تم العثور على المشروع في: $PROJECT_ROOT"
+            cp -r $PROJECT_ROOT/. .
+          else
+            echo "خطأ: لم نجد ملفات الأندرويد الأصلية داخل الملف المضغوط!"
+            ls -R extracted_files
+            exit 1
+          fi
+          
+          # إعطاء صلاحية التشغيل للمحرك
+          chmod +x gradlew
 
       - name: set up JDK 17
         uses: actions/setup-java@v4
@@ -28,5 +39,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: My-App-APK
+          name: MobileApp-Final
           path: "**/build/outputs/apk/debug/*.apk"
