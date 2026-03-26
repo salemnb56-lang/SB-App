@@ -1,4 +1,4 @@
-name: Build Android APK from ZIP
+name: Build Android APK
 on: [push]
 
 jobs:
@@ -7,26 +7,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unzip and Rescue Files # فك الضغط والبحث عن الملفات
+      - name: Extract and Setup Project
         run: |
-          # نستخدم *.zip للتعامل مع أي ملف مضغوط بغض النظر عن اسمه العربي
-          unzip -o "*.zip" -d extracted_files
-          
-          # البحث عن المجلد الذي يحتوي على ملف gradlew ونقل محتوياته للمجلد الرئيسي
-          PROJECT_ROOT=$(find extracted_files -name "gradlew" -exec dirname {} \;)
-          if [ -n "$PROJECT_ROOT" ]; then
-            echo "تم العثور على المشروع في: $PROJECT_ROOT"
-            cp -r $PROJECT_ROOT/. .
-          else
-            echo "خطأ: لم نجد ملفات الأندرويد الأصلية داخل الملف المضغوط!"
-            ls -R extracted_files
-            exit 1
-          fi
-          
-          # إعطاء صلاحية التشغيل للمحرك
+          unzip -o "agon-agent_1-107f3fc0.zip" -d extracted_temp
+          GRADLEW_PATH=$(find extracted_temp -name "gradlew" | head -n 1)
+          PROJECT_ROOT=$(dirname "$GRADLEW_PATH")
+          cp -r "$PROJECT_ROOT"/. .
           chmod +x gradlew
 
-      - name: set up JDK 17
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -36,7 +25,7 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: MobileApp-Final
