@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK (Multi-Project Support)
 on: [push]
 
 jobs:
@@ -7,12 +7,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract and Setup Project
+      - name: Unzip and Setup Any Project
         run: |
-          unzip -o "agon-agent_1-107f3fc0.zip" -d extracted_temp
+          # البحث عن أول ملف ZIP يجده في المستودع وفك ضغطه
+          unzip -o "*.zip" -d extracted_temp
+          
+          # البحث عن ملف gradlew في أي مكان داخل الملفات المفكوكة لضمان الهيكلة الصحيحة
           GRADLEW_PATH=$(find extracted_temp -name "gradlew" | head -n 1)
+          
+          if [ -z "$GRADLEW_PATH" ]; then
+            echo "خطأ: لم نجد ملفات الأندرويد الأصلية داخل الملف المضغوط! تأكد أنك رفعت مشروع أندرويد كاملاً."
+            exit 1
+          fi
+          
+          # تحديد المجلد الذي يحتوي على المشروع ونقل كل شيء للمجلد الرئيسي
           PROJECT_ROOT=$(dirname "$GRADLEW_PATH")
+          echo "تم العثور على المشروع في: $PROJECT_ROOT"
           cp -r "$PROJECT_ROOT"/. .
+          
+          # إعطاء صلاحية التشغيل للمحرك
           chmod +x gradlew
 
       - name: Set up JDK 17
@@ -28,5 +41,5 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MobileApp-Final
+          name: App-Ready-For-Install
           path: "**/build/outputs/apk/debug/*.apk"
