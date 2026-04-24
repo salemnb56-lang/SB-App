@@ -1,4 +1,4 @@
-name: Build Android APK (Multi-Project Support)
+name: Build Web to APK
 on: [push]
 
 jobs:
@@ -7,39 +7,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unzip and Setup Any Project
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install & Build Web
         run: |
-          # البحث عن أول ملف ZIP يجده في المستودع وفك ضغطه
-          unzip -o "*.zip" -d extracted_temp
-          
-          # البحث عن ملف gradlew في أي مكان داخل الملفات المفكوكة لضمان الهيكلة الصحيحة
-          GRADLEW_PATH=$(find extracted_temp -name "gradlew" | head -n 1)
-          
-          if [ -z "$GRADLEW_PATH" ]; then
-            echo "خطأ: لم نجد ملفات الأندرويد الأصلية داخل الملف المضغوط! تأكد أنك رفعت مشروع أندرويد كاملاً."
-            exit 1
-          fi
-          
-          # تحديد المجلد الذي يحتوي على المشروع ونقل كل شيء للمجلد الرئيسي
-          PROJECT_ROOT=$(dirname "$GRADLEW_PATH")
-          echo "تم العثور على المشروع في: $PROJECT_ROOT"
-          cp -r "$PROJECT_ROOT"/. .
-          
-          # إعطاء صلاحية التشغيل للمحرك
-          chmod +x gradlew
+          unzip -o "*.zip" -d .
+          # الدخول لمجلد المشروع إذا كان مضغوطاً بداخل مجلد
+          cd Digital-Leader || cd .
+          npm install
+          npm run build
+
+      - name: Setup Capacitor (The Wrapper)
+        run: |
+          cd Digital-Leader || cd .
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npx cap init "Digital Leader" "com.salem.leader" --web-dir dist
+          npx cap add android
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+      - name: Build Final APK
+        run: |
+          cd Digital-Leader/android || cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
-      - name: Upload APK Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: App-Ready-For-Install
+          name: Digital-Leader-App
           path: "**/build/outputs/apk/debug/*.apk"
