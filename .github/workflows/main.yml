@@ -1,4 +1,4 @@
-name: Ultimate Silent Builder
+name: Build Android APK
 on: [push]
 
 jobs:
@@ -8,50 +8,40 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: 'pnpm'
 
       - name: Smart Project Locator
         run: |
-          # 1. فك الضغط في مجلد مؤقت للبحث
           unzip -o "*.zip" -d search_area || true
-          
-          # 2. البحث عن قلب المشروع (package.json) أينما كان
           REAL_PATH=$(find search_area -name "package.json" -printf '%h' -quit)
-          
-          if [ -z "$REAL_PATH" ]; then
-            echo "خطأ: لم نجد ملفات المشروع داخل الـ ZIP. تأكد من رفعه بشكل صحيح."
-            exit 1
-          fi
-          
-          echo "تم تحديد موقع المشروع في: $REAL_PATH"
-          
-          # 3. نقل كل المحتويات للمجلد الرئيسي فوراً
+          if [ -z "$REAL_PATH" ]; then exit 1; fi
           cp -rn "$REAL_PATH"/* . || true
           cp -rn "$REAL_PATH"/.* . 2>/dev/null || true
           rm -rf search_area
 
       - name: Install Dependencies
-        run: npm install --legacy-peer-deps --no-audit
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build Web Assets
-        run: |
-          # محاولة بناء الموقع بأكثر من طريقة لضمان النجاح
-          npm run build --if-present || npx vite build || echo "Skip build"
+        run: pnpm run build --if-present
 
       - name: Setup Capacitor & Android
         run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android
-          # التأكد من وجود مجلد dist أو المجلد الذي بناه الموقع
+          pnpm add @capacitor/core @capacitor/cli @capacitor/android
           WEB_DIR=$(if [ -d "dist" ]; then echo "dist"; elif [ -d "build" ]; then echo "build"; else echo "."; fi)
-          
           if [ ! -f "capacitor.config.json" ]; then
             npx cap init "Digital Leader" "com.salem.leader" --web-dir $WEB_DIR
           fi
-          
-          npx cap add android || echo "Already exists"
+          npx cap add android || true
           npx cap copy android
 
       - name: Set up Java 17
@@ -62,17 +52,12 @@ jobs:
 
       - name: Final APK Generation
         run: |
-          if [ -d "android" ]; then
-            cd android
-            chmod +x gradlew
-            ./gradlew assembleDebug
-          else
-            echo "Error: Android folder not created!"
-            exit 1
-          fi
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
       - name: Deliver APK
         uses: actions/upload-artifact@v4
         with:
-          name: Digital-Leader-App-Fixed
+          name: MobileApp-Final
           path: "**/build/outputs/apk/debug/*.apk"
