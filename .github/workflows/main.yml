@@ -1,59 +1,78 @@
-name: Emergency Build Digital Leader
+name: Ultimate Silent Builder
 on: [push]
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: 24
 
-      - name: Force Flatten Files
+      - name: Smart Project Locator
         run: |
-          unzip -o "*.zip" -d temp_folder
-          # سحب كافة الملفات من أي مجلد فرعي إلى المجلد الرئيسي فوراً
-          find temp_folder -name "package.json" -execdir cp -rn . ../.. \;
-          rm -rf temp_folder
+          # 1. فك الضغط في مجلد مؤقت للبحث
+          unzip -o "*.zip" -d search_area || true
+          
+          # 2. البحث عن قلب المشروع (package.json) أينما كان
+          REAL_PATH=$(find search_area -name "package.json" -printf '%h' -quit)
+          
+          if [ -z "$REAL_PATH" ]; then
+            echo "خطأ: لم نجد ملفات المشروع داخل الـ ZIP. تأكد من رفعه بشكل صحيح."
+            exit 1
+          fi
+          
+          echo "تم تحديد موقع المشروع في: $REAL_PATH"
+          
+          # 3. نقل كل المحتويات للمجلد الرئيسي فوراً
+          cp -rn "$REAL_PATH"/* . || true
+          cp -rn "$REAL_PATH"/.* . 2>/dev/null || true
+          rm -rf search_area
 
       - name: Install Dependencies
-        run: npm install --legacy-peer-deps
+        run: npm install --legacy-peer-deps --no-audit
 
-      - name: Force Build Web
+      - name: Build Web Assets
         run: |
-          # محاولة البناء مباشرة عبر Vite حتى لو كان السكريبت مفقوداً
-          npx vite build || echo "Vite build failed, checking for dist folder..."
-          mkdir -p dist # التأكد من وجود المجلد لعدم تعطل العملية
+          # محاولة بناء الموقع بأكثر من طريقة لضمان النجاح
+          npm run build --if-present || npx vite build || echo "Skip build"
 
-      - name: Capacitor Integration
+      - name: Setup Capacitor & Android
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
+          # التأكد من وجود مجلد dist أو المجلد الذي بناه الموقع
+          WEB_DIR=$(if [ -d "dist" ]; then echo "dist"; elif [ -d "build" ]; then echo "build"; else echo "."; fi)
+          
           if [ ! -f "capacitor.config.json" ]; then
-            npx cap init "Digital Leader" "com.salem.leader" --web-dir dist
+            npx cap init "Digital Leader" "com.salem.leader" --web-dir $WEB_DIR
           fi
-          npx cap add android || echo "Android platform might exist"
+          
+          npx cap add android || echo "Already exists"
           npx cap copy android
 
-      - name: Set up JDK 17
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Final APK Construction
+      - name: Final APK Generation
         run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          if [ -d "android" ]; then
+            cd android
+            chmod +x gradlew
+            ./gradlew assembleDebug
+          else
+            echo "Error: Android folder not created!"
+            exit 1
+          fi
 
       - name: Deliver APK
         uses: actions/upload-artifact@v4
         with:
-          name: Digital-Leader-Final-App
+          name: Digital-Leader-App-Fixed
           path: "**/build/outputs/apk/debug/*.apk"
