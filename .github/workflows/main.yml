@@ -1,7 +1,6 @@
-name: Build Digital Leader APK
+name: Ultimate Digital Leader Builder
 on: [push]
 
-# إجبار المحرك على استخدام Node 24 لمنع التنبيهات
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -16,36 +15,31 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Extract & Find Project
+      - name: Extract & Move Files to Root
         run: |
-          unzip -o "*.zip" -d .
-          # البحث التلقائي عن المجلد الذي يحتوي على ملف البرمجة
-          PACKAGE_PATH=$(find . -name "package.json" | head -n 1)
-          if [ -z "$PACKAGE_PATH" ]; then
-            echo "خطأ: لم نجد ملف package.json! تأكد من رفع ملف الـ ZIP الصحيح."
-            exit 1
-          fi
-          PROJECT_DIR=$(dirname "$PACKAGE_PATH")
-          echo "تم العثور على المشروع في: $PROJECT_DIR"
-          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+          unzip -o "*.zip" -d temp_folder
+          # البحث عن مكان وجود ملف package.json الحقيقي ونقل كل محتوياته للمجلد الرئيسي
+          REAL_PATH=$(find temp_folder -name "package.json" | head -n 1)
+          PROJECT_ROOT=$(dirname "$REAL_PATH")
+          cp -r "$PROJECT_ROOT"/. .
+          rm -rf temp_folder
 
-      - name: Install & Build Web Project
+      - name: Install Dependencies
         run: |
-          cd ${{ env.PROJECT_DIR }}
-          npm install
-          npm run build --if-present
+          # استخدام --legacy-peer-deps لتفادي مشاكل التوافق في المشاريع القديمة
+          npm install --legacy-peer-deps
 
-      - name: Setup Android Wrapper (Capacitor)
+      - name: Build Web Project
+        run: npm run build --if-present
+
+      - name: Setup Capacitor (Android Wrapper)
         run: |
-          cd ${{ env.PROJECT_DIR }}
-          # تثبيت أدوات تحويل الموقع إلى تطبيق
           npm install @capacitor/core @capacitor/cli @capacitor/android
-          
-          # إنشاء إعدادات التطبيق إذا لم تكن موجودة
+          # التأكد من وجود مجلد البناء (dist) قبل إضافة الأندرويد
+          mkdir -p dist
           if [ ! -f "capacitor.config.json" ]; then
             npx cap init "Digital Leader" "com.salem.leader" --web-dir dist
           fi
-          
           npx cap add android
           npx cap copy android
 
@@ -55,16 +49,14 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build Final APK
+      - name: Build APK
         run: |
-          # البحث عن مجلد أندرويد والدخول إليه لبدء البناء
-          ANDROID_DIR=$(find . -name "gradlew" | head -n 1)
-          cd $(dirname "$ANDROID_DIR")
+          cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload Finished APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Digital-Leader-V1
+          name: Digital-Leader-Final
           path: "**/build/outputs/apk/debug/*.apk"
