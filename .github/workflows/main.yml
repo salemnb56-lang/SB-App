@@ -1,4 +1,4 @@
-name: Final Direct Build
+name: Production Build APK
 on: [push]
 
 jobs:
@@ -8,58 +8,60 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract ZIP
+      - name: Extract and Flatten
         run: |
           unzip -o "*.zip" -d temp_folder || true
-          # البحث عن مكان package.json ونقل الملفات للمجلد الرئيسي
+          # البحث عن المجلد الذي يحتوي على package.json
           REAL_PATH=$(find temp_folder -name "package.json" -printf '%h' -quit)
+          if [ -z "$REAL_PATH" ]; then exit 1; fi
+          # نقل الملفات للمجلد الرئيسي لضمان عدم وجود مسارات مفقودة
           cp -rn "$REAL_PATH"/* . || true
           cp -rn "$REAL_PATH"/.* . 2>/dev/null || true
           rm -rf temp_folder
-
-      - name: Install pnpm
-        run: npm install -g pnpm
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
 
+      - name: Install pnpm
+        run: npm install -g pnpm@latest
+
       - name: Install Dependencies
         run: |
-          # إعداد pnpm ليتجاهل تدقيق التبعات الصارم (بديل legacy-peer-deps)
+          # إعداد pnpm ليتوافق مع مكتباتك دون تدقيق صارم
           pnpm config set strict-peer-dependencies false
-          # تثبيت المكتبات مع تجاهل ملف lock المفقود
+          # التثبيت مع تجاهل ملف lock المفقود أو المتعارض
           pnpm install --no-frozen-lockfile
 
-      - name: Build Assets
+      - name: Build Web
         run: pnpm run build --if-present
 
-      - name: Capacitor Android
+      - name: Capacitor Setup
         run: |
           pnpm add @capacitor/core @capacitor/cli @capacitor/android
-          # تحديد مجلد المخرجات تلقائياً
-          WEB_DIR=$(if [ -d "dist" ]; then echo "dist"; elif [ -d "build" ]; then echo "build"; else echo "."; fi)
+          # التأكد من وجود مجلد المخرجات (dist أو build)
+          WEB_DIR=$(if [ -d "dist" ]; then echo "dist"; elif [ -d "build" ]; then echo "build"; else mkdir -p dist && echo "dist"; fi)
           if [ ! -f "capacitor.config.json" ]; then
             npx cap init "DigitalLeader" "com.salem.leader" --web-dir $WEB_DIR
           fi
           npx cap add android || true
           npx cap copy android
 
-      - name: Java Setup
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build APK
+      - name: Generate APK
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Export APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Final-App-Package
+          name: Digital-Leader-Final
           path: "**/build/outputs/apk/debug/*.apk"
