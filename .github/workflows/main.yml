@@ -1,26 +1,21 @@
-name: Final Rescue Build
+name: Final Direct Build
 on: [push]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract Project Files First
+      - name: Extract ZIP
         run: |
-          # فك الضغط فوراً قبل أي خطوة أخرى
           unzip -o "*.zip" -d temp_folder || true
-          # البحث عن مكان ملف package.json الحقيقي ونقله للمكان الرئيسي
+          # البحث عن مكان package.json ونقل الملفات للمجلد الرئيسي
           REAL_PATH=$(find temp_folder -name "package.json" -printf '%h' -quit)
-          if [ -z "$REAL_PATH" ]; then
-            echo "Error: No project files found in ZIP"
-            exit 1
-          fi
           cp -rn "$REAL_PATH"/* . || true
           cp -rn "$REAL_PATH"/.* . 2>/dev/null || true
-          rm -rf temp_folder search_area
+          rm -rf temp_folder
 
       - name: Install pnpm
         run: npm install -g pnpm
@@ -29,47 +24,42 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          # أزلنا خاصية الـ cache لأنها هي من تسببت في الخطأ الأخير
 
-      - name: Force Install Dependencies
+      - name: Install Dependencies
         run: |
-          # تجاهل ملفات الـ lock القديمة وتثبيت المكونات من جديد
-          pnpm install --no-frozen-lockfile --legacy-peer-deps
+          # إعداد pnpm ليتجاهل تدقيق التبعات الصارم (بديل legacy-peer-deps)
+          pnpm config set strict-peer-dependencies false
+          # تثبيت المكتبات مع تجاهل ملف lock المفقود
+          pnpm install --no-frozen-lockfile
 
-      - name: Build Web Assets
-        run: |
-          pnpm run build --if-present || npx vite build || echo "Skipping build step"
+      - name: Build Assets
+        run: pnpm run build --if-present
 
-      - name: Setup Capacitor & Android
+      - name: Capacitor Android
         run: |
           pnpm add @capacitor/core @capacitor/cli @capacitor/android
-          # التأكد من وجود مجلد الويب للتحويل
+          # تحديد مجلد المخرجات تلقائياً
           WEB_DIR=$(if [ -d "dist" ]; then echo "dist"; elif [ -d "build" ]; then echo "build"; else echo "."; fi)
           if [ ! -f "capacitor.config.json" ]; then
-            npx cap init "App" "com.app.final" --web-dir $WEB_DIR
+            npx cap init "DigitalLeader" "com.salem.leader" --web-dir $WEB_DIR
           fi
           npx cap add android || true
           npx cap copy android
 
-      - name: Set up Java 17
+      - name: Java Setup
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Final APK Generation
+      - name: Build APK
         run: |
-          if [ -d "android" ]; then
-            cd android
-            chmod +x gradlew
-            ./gradlew assembleDebug
-          else
-            echo "Android folder missing"
-            exit 1
-          fi
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
-      - name: Deliver APK
+      - name: Export APK
         uses: actions/upload-artifact@v4
         with:
-          name: App-Final-Package
+          name: Final-App-Package
           path: "**/build/outputs/apk/debug/*.apk"
