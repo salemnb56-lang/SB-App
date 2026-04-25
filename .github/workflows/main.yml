@@ -1,5 +1,9 @@
-name: Build Web to APK
+name: Build Digital Leader APK
 on: [push]
+
+# إجبار المحرك على استخدام Node 24 لمنع التنبيهات
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -7,25 +11,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
-      - name: Install & Build Web
+      - name: Extract & Find Project
         run: |
           unzip -o "*.zip" -d .
-          # الدخول لمجلد المشروع إذا كان مضغوطاً بداخل مجلد
-          cd Digital-Leader || cd .
-          npm install
-          npm run build
+          # البحث التلقائي عن المجلد الذي يحتوي على ملف البرمجة
+          PACKAGE_PATH=$(find . -name "package.json" | head -n 1)
+          if [ -z "$PACKAGE_PATH" ]; then
+            echo "خطأ: لم نجد ملف package.json! تأكد من رفع ملف الـ ZIP الصحيح."
+            exit 1
+          fi
+          PROJECT_DIR=$(dirname "$PACKAGE_PATH")
+          echo "تم العثور على المشروع في: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
 
-      - name: Setup Capacitor (The Wrapper)
+      - name: Install & Build Web Project
         run: |
-          cd Digital-Leader || cd .
+          cd ${{ env.PROJECT_DIR }}
+          npm install
+          npm run build --if-present
+
+      - name: Setup Android Wrapper (Capacitor)
+        run: |
+          cd ${{ env.PROJECT_DIR }}
+          # تثبيت أدوات تحويل الموقع إلى تطبيق
           npm install @capacitor/core @capacitor/cli @capacitor/android
-          npx cap init "Digital Leader" "com.salem.leader" --web-dir dist
+          
+          # إنشاء إعدادات التطبيق إذا لم تكن موجودة
+          if [ ! -f "capacitor.config.json" ]; then
+            npx cap init "Digital Leader" "com.salem.leader" --web-dir dist
+          fi
+          
           npx cap add android
+          npx cap copy android
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -35,12 +57,14 @@ jobs:
 
       - name: Build Final APK
         run: |
-          cd Digital-Leader/android || cd android
+          # البحث عن مجلد أندرويد والدخول إليه لبدء البناء
+          ANDROID_DIR=$(find . -name "gradlew" | head -n 1)
+          cd $(dirname "$ANDROID_DIR")
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload Finished APK
         uses: actions/upload-artifact@v4
         with:
-          name: Digital-Leader-App
+          name: Digital-Leader-V1
           path: "**/build/outputs/apk/debug/*.apk"
