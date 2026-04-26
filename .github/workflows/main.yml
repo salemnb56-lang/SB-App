@@ -1,45 +1,47 @@
-name: Kotlin App Chef
-on: [push]
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
 
 jobs:
   build:
+    name: Build Debug APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Prepare Ingredients (Unzip)
-        run: |
-          # فك ضغط ملف المشروع
-          unzip -o "*.zip" -d project_files || true
-          
-          # البحث عن ملف "gradlew" وهو مفتاح التشغيل
-          GRADLE_PATH=$(find project_files -name "gradlew" -printf '%h' -quit)
-          
-          if [ -z "$GRADLE_PATH" ]; then
-            echo "خطأ: لم نجد ملفات الأندرويد الأساسية. تأكد أن ملف الـ ZIP يحتوي على مشروع أندرويد."
-            exit 1
-          fi
-          
-          # نقل الملفات للمكان الصحيح للبدء في الطبخ
-          cp -rn "$GRADLE_PATH"/* . || true
-          cp -rn "$GRADLE_PATH"/.* . 2>/dev/null || true
-
-      - name: Setup Kitchen (Java 17)
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
           distribution: 'temurin'
-          cache: 'gradle'
+          java-version: '17'
 
-      - name: Grant Permission
-        run: chmod +x gradlew
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Cook the APK (Build)
-        run: ./gradlew assembleDebug
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.9'
 
-      - name: Deliver the App
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 8.9 --distribution-type bin
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: My-Kotlin-App
-          path: "**/build/outputs/apk/debug/*.apk"
+          name: qaaed-digital-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
