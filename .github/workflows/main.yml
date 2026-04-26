@@ -1,59 +1,47 @@
-name: Nuclear Build Fix
+name: Build Android APK (Kotlin Success Blueprint)
 on: [push]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Hard Reset Project
+      - name: Extract ZIP File
         run: |
-          unzip -o "*.zip" -d temp || true
-          REAL_PATH=$(find temp -name "package.json" -printf '%h' -quit)
-          cp -rn "$REAL_PATH"/* . || true
-          # حذف كل ما له علاقة بـ pnpm والكتالوجات التي تسبب الأخطاء
-          rm -f pnpm-lock.yaml pnpm-workspace.yaml
-          # استبدال كلمة "catalog:default" بأحدث النسخ لكي يفهمها npm العادي
-          sed -i 's/catalog:default/latest/g' package.json
-          rm -rf temp
-
-      - name: Setup Node.js 24
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Force Install (Standard NPM)
-        run: |
-          npm install --legacy-peer-deps --no-audit
-
-      - name: Build Web
-        run: npm run build --if-present || npx vite build
-
-      - name: Android Conversion
-        run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android
-          WEB_DIR=$(if [ -d "dist" ]; then echo "dist"; elif [ -d "build" ]; then echo "build"; else mkdir -p dist && echo "dist"; fi)
-          if [ ! -f "capacitor.config.json" ]; then
-            npx cap init "App" "com.salem.app" --web-dir $WEB_DIR
+          # فك ضغط ملف المشروع أياً كان اسمه
+          unzip -o "*.zip" -d project_files
+          
+          # البحث التلقائي عن المجلد الذي يحتوي على ملف البناء (gradlew)
+          # هذه الخطوة هي "سر النجاح" لأنها تتجاوز مشكلة المجلدات المتداخلة
+          PROJECT_ROOT=$(find project_files -name "gradlew" -printf '%h' -quit)
+          
+          if [ -z "$PROJECT_ROOT" ]; then
+            echo "Error: Could not find gradlew file in the ZIP."
+            exit 1
           fi
-          npx cap add android || true
-          npx cap copy android
+          
+          echo "Found project at: $PROJECT_ROOT"
+          # نقل كل ملفات المشروع للمجلد الرئيسي ليتمكن النظام من رؤيتها
+          cp -rn "$PROJECT_ROOT"/* . || true
+          cp -rn "$PROJECT_ROOT"/.* . 2>/dev/null || true
 
-      - name: Setup Java 17
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'
 
-      - name: Final APK
-        run: |
-          cd android && chmod +x gradlew
-          ./gradlew assembleDebug
+      - name: Grant Execute Permission for Gradlew
+        run: chmod +x gradlew
 
-      - name: Download Link
+      - name: Build with Gradle (The Cooking Process)
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK (Deliver the Order)
         uses: actions/upload-artifact@v4
         with:
-          name: Working-APK
-          path: "**/build/outputs/apk/debug/*.apk"
+          name: My-App-Package
+          path: app/build/outputs/apk/debug/*.apk
