@@ -1,4 +1,4 @@
-name: Modern Kotlin Builder - Final Fix
+name: Qaaed Digital Builder
 on: [push, workflow_dispatch]
 
 jobs:
@@ -8,21 +8,16 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Extraction and Setup
+      - name: Extraction and File Move
         run: |
-          # فك الضغط بأكثر من طريقة لضمان النجاح
-          unzip -o "qaaed-android.zip" -d output_dir || unzip -o "*.zip" -d output_dir || true
+          # فك ضغط الملف بالاسم الذي حددته
+          unzip -o "digital-leader-app..zip"
           
-          # البحث عن المجلد الذي يحتوي على ملف settings.gradle.kts (قلب المشروع)
-          # ونقل محتوياته للمجلد الرئيسي
-          REAL_PATH=$(find output_dir -name "settings.gradle.kts" -printf '%h' -quit)
-          if [ -n "$REAL_PATH" ]; then
-            echo "Found project at $REAL_PATH. Moving files..."
-            cp -rn "$REAL_PATH"/* . || true
-            cp -rn "$REAL_PATH"/.* . 2>/dev/null || true
-          else
-            echo "Error: Could not find settings.gradle.kts inside ZIP"
-            exit 1
+          # نقل الملفات من المجلد الداخلي (digital-leader-app) للمجلد الرئيسي
+          if [ -d "digital-leader-app" ]; then
+            echo "Moving files from internal folder..."
+            cp -rn digital-leader-app/* . || true
+            cp -rn digital-leader-app/.* . 2>/dev/null || true
           fi
 
       - name: Setup Java 17
@@ -30,21 +25,27 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          # قمنا بإزالة سطر الـ cache هنا لأنه هو من تسبب في الخطأ الأخير
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.9'
 
-      - name: Grant Execute Permission
-        run: [ -f gradlew ] && chmod +x gradlew || (gradle wrapper && chmod +x gradlew)
+      - name: Prepare Execution Files
+        run: |
+          # هذا هو بديل السطر 41 (طريقة كتابة آمنة لا تسبب خطأ YAML)
+          if [ -f gradlew ]; then
+            chmod +x gradlew
+          else
+            gradle wrapper --gradle-version 8.9
+            chmod +x gradlew
+          fi
 
-      - name: Build APK
+      - name: Build Android APK
         run: ./gradlew assembleDebug --no-daemon
 
-      - name: Upload Final APK
+      - name: Export Finished APK
         uses: actions/upload-artifact@v4
         with:
-          name: Qaaed-App-Ready
+          name: Qaaed-Leader-App
           path: "**/build/outputs/apk/debug/*.apk"
