@@ -1,4 +1,4 @@
-name: Qaaed Digital Builder
+name: Qaaed Digital Builder - Auto Fix
 on: [push, workflow_dispatch]
 
 jobs:
@@ -10,14 +10,19 @@ jobs:
 
       - name: Extraction and File Move
         run: |
-          # فك ضغط الملف بالاسم الذي حددته
           unzip -o "digital-leader-app..zip"
-          
-          # نقل الملفات من المجلد الداخلي (digital-leader-app) للمجلد الرئيسي
           if [ -d "digital-leader-app" ]; then
-            echo "Moving files from internal folder..."
             cp -rn digital-leader-app/* . || true
             cp -rn digital-leader-app/.* . 2>/dev/null || true
+          fi
+
+      - name: Fix Missing Styles
+        run: |
+          # هذا السطر يبحث عن ملف التنسيقات ويضيف النمط المفقود تلقائياً
+          FILE=$(find app/src/main/res/values -name "themes.xml" -o -name "styles.xml" | head -n 1)
+          if [ -f "$FILE" ]; then
+            sed -i '/<\/resources>/i \    <style name="TextStyle"><item name="android:textSize">16sp</item><item name="android:textColor">#000000</item></style>' $FILE
+            echo "Successfully injected TextStyle into $FILE"
           fi
 
       - name: Setup Java 17
@@ -33,7 +38,6 @@ jobs:
 
       - name: Prepare Execution Files
         run: |
-          # هذا هو بديل السطر 41 (طريقة كتابة آمنة لا تسبب خطأ YAML)
           if [ -f gradlew ]; then
             chmod +x gradlew
           else
