@@ -66,7 +66,7 @@ jobs:
       - name: Install Buildozer and Cython
         run: |
           pip install --upgrade pip
-          pip install buildozer cython==0.29.33 virtualenv
+          pip install buildozer "cython>=3.0.0,<3.1.0" virtualenv
 
       - name: Generate Placeholder Assets
         run: |
