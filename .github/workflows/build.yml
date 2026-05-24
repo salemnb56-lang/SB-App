@@ -21,7 +21,6 @@ jobs:
             echo "وجدنا ملفاً مضغوطاً: $ZIP_FILE. جاري فك الضغط..."
             unzip -o "$ZIP_FILE" -d .
             
-            # التحقق مما إذا كانت الملفات داخل مجلد فرعي ونقلها للجذر
             if [ ! -f buildozer.spec ]; then
               SUBDIR=$(find . -maxdepth 2 -name "buildozer.spec" -exec dirname {} \;)
               if [ "$SUBDIR" != "." ] && [ -n "$SUBDIR" ]; then
@@ -59,7 +58,7 @@ jobs:
             openjdk-17-jdk-headless \
             unzip zip \
             autoconf libtool pkg-config \
-            git ccache gperf libncurses5 libtinfo5
+            git ccache gperf
 
       - name: Set up ccache
         run: |
@@ -70,18 +69,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          key: buildozer-global-v3-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-global-v4-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            buildozer-global-v3-${{ runner.os }}-
+            buildozer-global-v4-${{ runner.os }}-
 
-          # تغيير الكود إلى v3 يضمن التخلص من أي ملفات تالفة تسببت في الخطأ السابق
       - name: Cache .buildozer Directory
         uses: actions/cache@v4
         with:
           path: .buildozer
-          key: buildozer-local-v3-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-local-v4-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            buildozer-local-v3-${{ runner.os }}-
+            buildozer-local-v4-${{ runner.os }}-
 
       - name: Install Buildozer and Cython
         run: |
