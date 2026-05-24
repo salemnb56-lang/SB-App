@@ -1,0 +1,146 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Extract Project Zip (If uploaded)
+        run: |
+          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
+          if [ -n "$ZIP_FILE" ]; then
+            echo "وجدنا ملفاً مضغوطاً: $ZIP_FILE. جاري فك الضغط..."
+            unzip -o "$ZIP_FILE" -d .
+            
+            # التحقق مما إذا كانت الملفات داخل مجلد فرعي ونقلها للجذر
+            if [ ! -f buildozer.spec ]; then
+              SUBDIR=$(find . -maxdepth 2 -name "buildozer.spec" -exec dirname {} \;)
+              if [ "$SUBDIR" != "." ] && [ -n "$SUBDIR" ]; then
+                echo "نقل الملفات من المجلد الفرعي $SUBDIR إلى الجذر الرئيسي..."
+                mv "$SUBDIR"/* . || true
+                mv "$SUBDIR"/.* . || true
+              fi
+            fi
+            rm "$ZIP_FILE"
+          else
+            echo "لم يتم العثور على ملف zip، سيتم استخدام الملفات المرفوعة مباشرة."
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            build-essential \
+            libsqlite3-dev sqlite3 \
+            bzip2 libbz2-dev \
+            zlib1g-dev \
+            libssl-dev openssl \
+            libgdbm-dev libgdbm-compat-dev \
+            liblzma-dev \
+            libreadline-dev \
+            libncursesw5-dev \
+            libffi-dev \
+            uuid-dev \
+            libgmp-dev \
+            openjdk-17-jdk-headless \
+            unzip zip \
+            autoconf libtool pkg-config \
+            git ccache gperf libncurses5 libtinfo5
+
+      - name: Set up ccache
+        run: |
+          ccache --max-size=10G
+          echo "PATH=/usr/lib/ccache:$PATH" >> $GITHUB_ENV
+
+      - name: Cache Buildozer Global Directory
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-global-v3-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-global-v3-${{ runner.os }}-
+
+          # تغيير الكود إلى v3 يضمن التخلص من أي ملفات تالفة تسببت في الخطأ السابق
+      - name: Cache .buildozer Directory
+        uses: actions/cache@v4
+        with:
+          path: .buildozer
+          key: buildozer-local-v3-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-local-v3-${{ runner.os }}-
+
+      - name: Install Buildozer and Cython
+        run: |
+          pip install --upgrade pip
+          pip install buildozer "cython>=3.0.0,<3.1.0" virtualenv
+
+      - name: Generate Placeholder Assets
+        run: |
+          python3 - <<'EOF'
+          from PIL import Image, ImageDraw
+          def make_icon(path, size):
+              img = Image.new("RGBA", (size, size), (52, 73, 94, 255))
+              draw = ImageDraw.Draw(img)
+              cx, cy = size // 2, size // 2
+              r = size // 4
+              draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(149, 165, 166, 220), width=max(2, size // 32))
+              img.save(path)
+          make_icon("icon.png", 512)
+          make_icon("presplash.png", 1024)
+          print("Assets generated.")
+          EOF
+        continue-on-error: true
+
+      - name: Build APK with Buildozer
+        run: |
+          buildozer -v android release
+        env:
+          BUILDOZER_ALLOW_KIVY_NEW_TOOLCHAIN: 1
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+          ANDROID_SDK_ROOT: ~/.buildozer/android/platform/android-sdk
+          CCACHE_DIR: ~/.ccache
+
+      - name: Locate Built APK
+        id: find_apk
+        run: |
+          APK_PATH=$(find bin/ -name "*.apk" | head -1)
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "Found APK: $APK_PATH"
+          ls -lh bin/ || echo "bin/ directory not found"
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetSocket-Utility-APK
+          path: bin/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: "NetSocket Utility v${{ github.run_number }}"
+          body: |
+            ## NetSocket Utility — إصدار تلقائي نقي
+            تم بناء ملف التطبيق بنجاح ومتوافق مع أندرويد 5.0 فما فوق.
+          files: bin/*.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
