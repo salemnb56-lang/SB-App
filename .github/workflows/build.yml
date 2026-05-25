@@ -14,24 +14,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Extract Project Zip (If uploaded)
-        run: |
-          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
-          if [ -n "$ZIP_FILE" ]; then
-            echo "وجدنا ملفاً مضغوطاً: $ZIP_FILE. جاري فك الضغط..."
-            unzip -o "$ZIP_FILE" -d .
-            
-            if [ ! -f buildozer.spec ]; then
-              SUBDIR=$(find . -maxdepth 2 -name "buildozer.spec" -exec dirname {} \;)
-              if [ "$SUBDIR" != "." ] && [ -n "$SUBDIR" ]; then
-                echo "نقل الملفات من المجلد الفرعي $SUBDIR إلى الجذر الرئيسي..."
-                mv "$SUBDIR"/* . || true
-                mv "$SUBDIR"/.* . || true
-              fi
-            fi
-            rm "$ZIP_FILE"
-          fi
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -58,7 +40,7 @@ jobs:
           path: |
             ~/.buildozer
             .buildozer
-          key: buildozer-v5-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-v6-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
 
       - name: Install Buildozer, Cython, and Pillow
         run: |
@@ -78,7 +60,7 @@ jobs:
               img.save(path)
           make_icon("icon.png", 512)
           make_icon("presplash.png", 1024)
-          print("تم إنشاء الأيقونات بنجاح!")
+          print("Assets generated.")
           EOF
 
       - name: Build APK with Buildozer
