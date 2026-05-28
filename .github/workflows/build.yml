@@ -1,102 +1,33 @@
-name: Build Android APK
-
-on:
-  push:
-    branches: [ main, master ]
-  workflow_dispatch:
+name: Build APK
+on: [push, pull_request]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
+    runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v3
 
-      # هذه هي الخطوة الحيوية التي سقطت سابقاً وتسببت في عدم العثور على ملف spec
-      - name: Extract Project Zip (If uploaded)
-        run: |
-          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
-          if [ -n "$ZIP_FILE" ]; then
-            echo "وجدنا ملفاً مضغوطاً: $ZIP_FILE. جاري فك الضغط..."
-            unzip -o "$ZIP_FILE" -d .
-            
-            if [ ! -f buildozer.spec ]; then
-              SUBDIR=$(find . -maxdepth 2 -name "buildozer.spec" -exec dirname {} \;)
-              if [ "$SUBDIR" != "." ] && [ -n "$SUBDIR" ]; then
-                echo "نقل الملفات من المجلد الفرعي $SUBDIR إلى الجذر الرئيسي..."
-                mv "$SUBDIR"/* . || true
-                mv "$SUBDIR"/.* . || true
-              fi
-            fi
-            rm "$ZIP_FILE"
-          else
-            echo "لم يتم العثور على ملف zip، سيتم استخدام الملفات المرفوعة مباشرة."
-          fi
+    - name: Get Date
+      id: get-date
+      run: |
+        echo "date=$(date -u +'%Y%m%d')" >> $GITHUB_OUTPUT
+      shell: bash
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+    - name: Cache Buildozer download folder
+      uses: actions/cache@v3
+      with:
+        path: ~/.buildozer
+        key: buildozer-config-${{ steps.get-date.outputs.date }}
 
-      - name: Install System Dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y \
-            build-essential libsqlite3-dev sqlite3 bzip2 libbz2-dev \
-            zlib1g-dev libssl-dev openssl libgdbm-dev libgdbm-compat-dev \
-            liblzma-dev libreadline-dev libncursesw5-dev libffi-dev \
-            uuid-dev libgmp-dev openjdk-17-jdk-headless unzip zip \
-            autoconf libtool pkg-config git ccache gperf
+    - name: Build with Buildozer
+      uses: ArtemSBulgakov/buildozer-action@v1
+      with:
+        command: buildozer android debug
+        repository_txt: 'true'
 
-      - name: Set up ccache
-        run: |
-          ccache --max-size=10G
-          echo "PATH=/usr/lib/ccache:$PATH" >> $GITHUB_ENV
-
-      - name: Cache Buildozer
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.buildozer
-            .buildozer
-          key: buildozer-v7-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-
-      - name: Install Buildozer, Cython, and Pillow
-        run: |
-          pip install --upgrade pip
-          pip install buildozer "cython>=3.0.0,<3.1.0" virtualenv Pillow
-
-      - name: Generate Placeholder Assets
-        run: |
-          python3 - <<'EOF'
-          from PIL import Image, ImageDraw
-          def make_icon(path, size):
-              img = Image.new("RGBA", (size, size), (52, 73, 94, 255))
-              draw = ImageDraw.Draw(img)
-              cx, cy = size // 2, size // 2
-              r = size // 4
-              draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(149, 165, 166, 220), width=max(2, size // 32))
-              img.save(path)
-          make_icon("icon.png", 512)
-          make_icon("presplash.png", 1024)
-          print("Assets generated.")
-          EOF
-
-      - name: Build APK with Buildozer
-        run: |
-          buildozer -v android release
-        env:
-          BUILDOZER_ALLOW_KIVY_NEW_TOOLCHAIN: 1
-          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-          ANDROID_SDK_ROOT: ~/.buildozer/android/platform/android-sdk
-          CCACHE_DIR: ~/.ccache
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: NetSocket-Utility-APK
-          path: bin/*.apk
-          if-no-files-found: error
-          retention-days: 30
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: package
+        path: bin/*.apk
